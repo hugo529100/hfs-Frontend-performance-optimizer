@@ -1,0 +1,81 @@
+/* 加速模式基礎樣式 */
+body.accelerated-mode {
+  --animation-duration: 0.01s !important;
+}
+
+/* 通用優化規則 */
+body.accelerated-mode * {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 視頻播放優化 */
+body.accelerated-mode video,
+body.accelerated-mode video * {
+  transition: none !important;
+  animation: none !important;
+  transform: none !important;
+  will-change: auto !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* 圖片優化 */
+body.accelerated-mode img {
+  transition: none !important;
+  animation: none !important;
+  filter: none !important;
+}
+
+/* 基本元素樣式 */
+body.accelerated-mode .background,
+body.accelerated-mode .overlay,
+body.accelerated-mode .card {
+  background: var(--bg) !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* 覆蓋內聯樣式 */
+body.accelerated-mode [style*="filter"],
+body.accelerated-mode [style*="backdrop-filter"] {
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* 強制應用不透明背景 */
+body.accelerated-mode .background,
+body.accelerated-mode .overlay,
+body.accelerated-mode .card,
+body.accelerated-mode .dialog {
+  background: var(--bg) !important;
+}
+
+body.accelerated-mode [style*="background"],
+body.accelerated-mode [style*="background-color"] {
+  background: var(--bg) !important;
+  background-color: var(--bg) !important;
+}
+
+/* 主題特定樣式 */
+body.accelerated-mode.theme-dark div,
+body.accelerated-mode.theme-dark header {
+  background: #000000 !important;
+  background-color: #000000 !important;
+}
+
+body.accelerated-mode div,
+body.accelerated-mode header {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+
+/* 確保視頻播放流暢 */
+body.accelerated-mode video {
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
