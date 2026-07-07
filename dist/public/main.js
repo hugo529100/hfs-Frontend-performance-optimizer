@@ -9,6 +9,9 @@
   let mediaCheckInterval = null;
   let mediaObserver = null;
   let visibilityObserver = null;
+  let showingObserver = null;
+  let optionsObserver = null;
+  let isScriptActive = false;
   const CHECK_INTERVAL = 500;
 
   // 優化範圍選項
@@ -32,16 +35,15 @@
 
   // 獲取儲存的優化範圍
   const getOptimizeScope = () => {
-    if (!isLocalStorageSupported()) return 2; // 默認為視頻和圖片
+    if (!isLocalStorageSupported()) return 2;
     
     try {
       const stored = localStorage.getItem(STORAGE_KEY_OPTIMIZE);
       if (stored !== null) {
         const value = parseInt(stored);
-        // 確保值在有效範圍內 (0-3)
         if (value >= 0 && value <= 3) return value;
       }
-      return 2; // 默認值
+      return 2;
     } catch (e) {
       return 2;
     }
@@ -69,21 +71,20 @@
   const checkAndApplyOptimization = () => {
     const scope = getOptimizeScope();
     
-    // 根據範圍決定優化邏輯
     switch (scope) {
-      case 0: // 不啟用
+      case 0:
         toggleOptimization(false);
         break;
         
-      case 1: // 僅視頻 - 嚴格檢查只有視頻
+      case 1:
         toggleOptimization(videoPlayerVisible && !imageViewerVisible);
         break;
         
-      case 2: // 視頻和圖片
+      case 2:
         toggleOptimization(videoPlayerVisible || imageViewerVisible);
         break;
         
-      case 3: // 整個頁面
+      case 3:
         toggleOptimization(true);
         break;
         
@@ -92,32 +93,26 @@
     }
   };
 
-  // 檢查是否為視頻播放器 - 嚴格檢測
+  // 檢查是否為視頻播放器
   const isVideoPlayer = (el) => {
     if (!el) return false;
     
-    // 1. 直接是 video 元素
     if (el.nodeName === 'VIDEO') {
       return true;
     }
     
-    // 2. 檢查是否為視頻播放器容器
     if (el.classList) {
-      // 視頻播放器常見的類名
       if (el.classList.contains('video-player') || 
           el.classList.contains('player') ||
           el.classList.contains('media-player') ||
           el.classList.contains('video-container')) {
-        // 確保容器內有 video 元素
         if (el.querySelector('video')) {
           return true;
         }
       }
     }
     
-    // 3. 檢查是否為視頻播放器對話框
     if (el.getAttribute('role') === 'dialog' && el.classList.contains('contain')) {
-      // 確保對話框內有 video 元素
       if (el.querySelector('video')) {
         return true;
       }
@@ -126,18 +121,15 @@
     return false;
   };
 
-  // 檢查是否為圖片瀏覽器 - 嚴格檢測，排除視頻相關元素
+  // 檢查是否為圖片瀏覽器
   const isImageViewer = (el) => {
     if (!el || !el.classList) return false;
     
-    // 如果是 video 相關元素，直接排除
     if (el.nodeName === 'VIDEO' || el.querySelector('video')) {
       return false;
     }
     
-    // 檢查是否為包含圖片瀏覽器的對話框
     if (el.getAttribute('role') === 'dialog' && el.classList.contains('contain')) {
-      // 確保不是視頻對話框
       if (el.querySelector('video')) {
         return false;
       }
@@ -151,15 +143,12 @@
       }
     }
     
-    // 檢查是否為圖片瀏覽器的主要容器
     if (el.classList.contains('showing-container') && el.querySelector('img.showing')) {
-      // 確保容器內沒有 video
       if (!el.querySelector('video')) {
         return true;
       }
     }
     
-    // 檢查是否為全屏圖片的對話框
     if (el.classList.contains('showing') && el.nodeName === 'IMG') {
       const dialog = el.closest('[role="dialog"].contain');
       if (dialog && !dialog.querySelector('video')) {
@@ -177,72 +166,33 @@
       images: []
     };
     
-    // 1. 獲取所有視頻相關元素 - 嚴格識別
-    // 所有 video 標籤
-    const videos = document.querySelectorAll('video');
-    videos.forEach(video => {
-      elements.videos.push(video);
-      
-      // 加入 video 的播放器容器
-      const playerContainer = video.closest('.video-player, .player, .media-player, [role="dialog"].contain');
-      if (playerContainer && !elements.videos.includes(playerContainer)) {
-        elements.videos.push(playerContainer);
-      }
-    });
-    
-    // 視頻播放器容器
-    const playerContainers = document.querySelectorAll('.video-player, .player, .media-player, .video-container');
-    playerContainers.forEach(container => {
-      if (container.querySelector('video') && !elements.videos.includes(container)) {
-        elements.videos.push(container);
-      }
-    });
-    
-    // 視頻播放器對話框
-    const videoDialogs = document.querySelectorAll('[role="dialog"].contain');
-    videoDialogs.forEach(dialog => {
-      if (dialog.querySelector('video') && !elements.videos.includes(dialog)) {
-        elements.videos.push(dialog);
-      }
-    });
-    
-    // 2. 獲取所有圖片瀏覽器相關元素 - 嚴格識別，排除視頻
-    // 圖片瀏覽器對話框
-    const imageDialogs = document.querySelectorAll('[role="dialog"].contain');
-    imageDialogs.forEach(dialog => {
-      // 確保不是視頻對話框
-      if (!dialog.querySelector('video') && 
-          ((dialog.querySelector('.showing-container') && dialog.querySelector('img.showing')) ||
-          dialog.querySelector('.preview-controls-fullscreen-btn'))) {
-        if (!elements.images.includes(dialog)) {
-          elements.images.push(dialog);
-        }
-      }
-    });
-    
-    // showing containers
+    // 主要針對 showing-container 內的媒體元素
     const showingContainers = document.querySelectorAll('.showing-container');
-    showingContainers.forEach(container => {
-      // 確保不是視頻容器
-      if (!container.querySelector('video') && 
-          container.querySelector('img.showing') && 
-          !elements.images.includes(container)) {
-        elements.images.push(container);
-      }
-    });
     
-    // showing images
-    const showingImages = document.querySelectorAll('img.showing');
-    showingImages.forEach(img => {
-      const dialog = img.closest('[role="dialog"].contain');
-      if (dialog) {
-        // 如果圖片在對話框中，確保對話框不是視頻對話框
-        if (!dialog.querySelector('video') && !elements.images.includes(dialog)) {
-          elements.images.push(dialog);
+    showingContainers.forEach(container => {
+      // 檢查 showing-container 內的 video 元素
+      const videos = container.querySelectorAll('video');
+      videos.forEach(video => {
+        if (!elements.videos.includes(video)) {
+          elements.videos.push(video);
         }
-      } else if (!elements.images.includes(img)) {
-        elements.images.push(img);
-      }
+      });
+      
+      // 檢查 showing-container 內的 video-js 播放器
+      const videoPlayers = container.querySelectorAll('.video-js');
+      videoPlayers.forEach(player => {
+        if (!elements.videos.includes(player)) {
+          elements.videos.push(player);
+        }
+      });
+      
+      // 檢查 showing-container 內的圖片
+      const showingImages = container.querySelectorAll('img.showing');
+      showingImages.forEach(img => {
+        if (!elements.images.includes(img)) {
+          elements.images.push(img);
+        }
+      });
     });
     
     return elements;
@@ -269,13 +219,22 @@
     return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
   };
 
+  // 檢查是否存在 showing-container
+  const isShowingMode = () => {
+    return document.querySelector('.showing-container') !== null;
+  };
+
   // 更新媒體可見性狀態
   const updateMediaVisibility = () => {
+    // 只有在 showing-container 存在時才檢查
+    if (!isShowingMode()) {
+      return;
+    }
+    
     const elements = getMediaElements();
     let newVideoVisible = false;
     let newImageVisible = false;
     
-    // 檢查視頻可見性
     for (const video of elements.videos) {
       if (isElementInViewport(video) && isElementActuallyVisible(video)) {
         newVideoVisible = true;
@@ -283,7 +242,6 @@
       }
     }
     
-    // 檢查圖片可見性
     for (const image of elements.images) {
       if (isElementInViewport(image) && isElementActuallyVisible(image)) {
         newImageVisible = true;
@@ -291,14 +249,12 @@
       }
     }
     
-    // 更新狀態
     const videoChanged = (newVideoVisible !== videoPlayerVisible);
     const imageChanged = (newImageVisible !== imageViewerVisible);
     
     videoPlayerVisible = newVideoVisible;
     imageViewerVisible = newImageVisible;
     
-    // 如果有變化，重新檢查是否需要優化
     if (videoChanged || imageChanged) {
       checkAndApplyOptimization();
     }
@@ -317,13 +273,11 @@
         const el = entry.target;
         if (!isElementActuallyVisible(el)) continue;
         
-        // 檢查是否為視頻相關元素
         if (isVideoPlayer(el)) {
           const wasVisible = videoPlayerVisible;
           videoPlayerVisible = entry.isIntersecting;
           if (wasVisible !== videoPlayerVisible) needsUpdate = true;
         } 
-        // 檢查是否為圖片相關元素
         else if (isImageViewer(el)) {
           const wasVisible = imageViewerVisible;
           imageViewerVisible = entry.isIntersecting;
@@ -338,90 +292,161 @@
       threshold: 0.1
     });
     
-    // 監控所有現有的媒體元素
     const elements = getMediaElements();
     elements.videos.forEach(video => visibilityObserver.observe(video));
     elements.images.forEach(image => visibilityObserver.observe(image));
-    
-    // 監聽新添加的媒體元素
-    if (mediaObserver) {
-      mediaObserver.disconnect();
-    }
-    
-    mediaObserver = new MutationObserver((mutations) => {
-      let needsRecheck = false;
-      
-      for (const mutation of mutations) {
-        if (mutation.addedNodes.length) {
-          for (const node of mutation.addedNodes) {
-            if (!node.nodeType || node.nodeType !== 1) continue;
-            
-            // 檢查新增的視頻相關元素
-            if (isVideoPlayer(node)) {
-              visibilityObserver.observe(node);
-              needsRecheck = true;
-            }
-            
-            // 檢查新增的圖片瀏覽器
-            if (isImageViewer(node)) {
-              visibilityObserver.observe(node);
-              needsRecheck = true;
-            }
-            
-            // 檢查子元素
-            if (node.querySelectorAll) {
-              const videos = node.querySelectorAll('video');
-              videos.forEach(video => {
-                if (isVideoPlayer(video)) {
-                  visibilityObserver.observe(video);
-                  needsRecheck = true;
-                }
-              });
-              
-              const images = node.querySelectorAll('img.showing');
-              images.forEach(img => {
-                if (isImageViewer(img)) {
-                  visibilityObserver.observe(img);
-                  needsRecheck = true;
-                }
-              });
-            }
-          }
-        }
-      }
-      
-      if (needsRecheck) {
-        setTimeout(updateMediaVisibility, 100);
-      }
-    });
-    
-    mediaObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
   };
 
-  // 開始監控媒體
-  const startMediaMonitoring = () => {
+  // 啟動腳本功能
+  const activateScript = () => {
+    if (isScriptActive) return;
+    
+    console.log('Performance optimization activated for showing-container');
+    isScriptActive = true;
+    
+    // 初始化優化狀態
+    checkAndApplyOptimization();
+    
+    // 開始媒體監控
     if (!window.IntersectionObserver) {
       if (mediaCheckInterval) {
         clearInterval(mediaCheckInterval);
       }
-      
       mediaCheckInterval = setInterval(updateMediaVisibility, CHECK_INTERVAL);
     } else {
       setupVisibilityObserver();
     }
+    
+    // 設置媒體監控的 DOM 變化觀察器（限制在 showing-container 內）
+    if (mediaObserver) {
+      mediaObserver.disconnect();
+    }
+    
+    const showingContainer = document.querySelector('.showing-container');
+    if (showingContainer) {
+      mediaObserver = new MutationObserver((mutations) => {
+        let needsRecheck = false;
+        
+        for (const mutation of mutations) {
+          if (mutation.addedNodes.length) {
+            for (const node of mutation.addedNodes) {
+              if (!node.nodeType || node.nodeType !== 1) continue;
+              
+              if (isVideoPlayer(node) || isImageViewer(node)) {
+                if (visibilityObserver) visibilityObserver.observe(node);
+                needsRecheck = true;
+              }
+              
+              if (node.querySelectorAll) {
+                const videos = node.querySelectorAll('video');
+                videos.forEach(video => {
+                  if (isVideoPlayer(video) && visibilityObserver) {
+                    visibilityObserver.observe(video);
+                    needsRecheck = true;
+                  }
+                });
+                
+                const showingImages = node.querySelectorAll('img.showing');
+                showingImages.forEach(img => {
+                  if (isImageViewer(img) && visibilityObserver) {
+                    visibilityObserver.observe(img);
+                    needsRecheck = true;
+                  }
+                });
+              }
+            }
+          }
+        }
+        
+        if (needsRecheck) {
+          setTimeout(updateMediaVisibility, 100);
+        }
+      });
+      
+      mediaObserver.observe(showingContainer, {
+        childList: true,
+        subtree: true
+      });
+    }
   };
 
-  // 在Options界面中添加設置面板
+  // 停用腳本功能
+  const deactivateScript = () => {
+    if (!isScriptActive) return;
+    
+    console.log('Performance optimization deactivated');
+    isScriptActive = false;
+    
+    // 清除媒體監控
+    if (mediaCheckInterval) {
+      clearInterval(mediaCheckInterval);
+      mediaCheckInterval = null;
+    }
+    
+    if (visibilityObserver) {
+      visibilityObserver.disconnect();
+      visibilityObserver = null;
+    }
+    
+    if (mediaObserver) {
+      mediaObserver.disconnect();
+      mediaObserver = null;
+    }
+    
+    // 清除優化狀態
+    toggleOptimization(false);
+    
+    // 重置狀態標記
+    videoPlayerVisible = false;
+    imageViewerVisible = false;
+  };
+
+  // 在Options界面中添加設置面板 - 改進版
   const insertSettingsPanel = () => {
+    // 直接查找 Options 对话
     const optionsDialog = document.querySelector('.dialog[aria-modal="true"]');
     if (!optionsDialog) return;
 
+    // 更靈活地查找插入位置
     const themeSelect = document.getElementById('option-theme');
-    if (!themeSelect) return;
+    if (!themeSelect) {
+      // 如果找不到 theme select，尝试找其他合适的插入位置
+      const dialogContent = optionsDialog.querySelector('.dialog-content') || optionsDialog;
+      if (!dialogContent) return;
+      
+      // 检查是否已经插入
+      if (document.getElementById(SETTINGS_PANEL_ID)) return;
+      
+      const currentScope = getOptimizeScope();
+      const settingsHTML = `
+        <div id="${SETTINGS_PANEL_ID}" style="margin-top:1em; padding-top:1em; border-top:1px solid var(--fg-2);">
+          <div style="margin-bottom: 0.5em;">
+            <label style="display: block; margin-bottom: 0.2em; font-size: 0.9em;">Performance Optimization Scope:</label>
+            <select id="${OPTIMIZE_SCOPE_ID}" style="width: 100%; padding: 0.4em;">
+              <option value="0" ${currentScope === 0 ? 'selected' : ''}>${OPTIMIZE_SCOPES[0].name}</option>
+              <option value="1" ${currentScope === 1 ? 'selected' : ''}>${OPTIMIZE_SCOPES[1].name}</option>
+              <option value="2" ${currentScope === 2 ? 'selected' : ''}>${OPTIMIZE_SCOPES[2].name}</option>
+              <option value="3" ${currentScope === 3 ? 'selected' : ''}>${OPTIMIZE_SCOPES[3].name}</option>
+            </select>
+          </div>
+        </div>
+      `;
+      
+      dialogContent.appendChild(createElementFromHTML(settingsHTML));
+      
+      const scopeSelect = document.getElementById(OPTIMIZE_SCOPE_ID);
+      if (scopeSelect) {
+        scopeSelect.addEventListener('change', (e) => {
+          const newScope = parseInt(e.target.value);
+          setOptimizeScope(newScope);
+          checkAndApplyOptimization();
+        });
+      }
+      
+      return;
+    }
 
+    // 檢查是否已經添加過
     if (document.getElementById(SETTINGS_PANEL_ID)) {
       return;
     }
@@ -445,35 +470,117 @@
     themeSelect.insertAdjacentHTML('afterend', settingsHTML);
 
     const scopeSelect = document.getElementById(OPTIMIZE_SCOPE_ID);
+    if (scopeSelect) {
+      scopeSelect.addEventListener('change', (e) => {
+        const newScope = parseInt(e.target.value);
+        setOptimizeScope(newScope);
+        checkAndApplyOptimization();
+      });
+    }
+  };
 
-    scopeSelect.addEventListener('change', (e) => {
-      const newScope = parseInt(e.target.value);
-      setOptimizeScope(newScope);
+  // 辅助函数：从HTML字符串创建元素
+  const createElementFromHTML = (htmlString) => {
+    const div = document.createElement('div');
+    div.innerHTML = htmlString.trim();
+    return div.firstChild;
+  };
+
+  // 監控 showing-container 的出現和消失
+  const monitorShowingContainer = () => {
+    // 初始檢查
+    if (isShowingMode()) {
+      activateScript();
+    }
+    
+    // 使用 MutationObserver 監控 showing-container 的出現和消失
+    if (showingObserver) {
+      showingObserver.disconnect();
+    }
+    
+    showingObserver = new MutationObserver((mutations) => {
+      let showingContainerChanged = false;
       
-      // 重新檢查優化狀態
-      checkAndApplyOptimization();
+      for (const mutation of mutations) {
+        // 檢查新增的節點
+        if (mutation.addedNodes.length) {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType === 1) {
+              if ((node.classList && node.classList.contains('showing-container')) || 
+                  (node.querySelector && node.querySelector('.showing-container'))) {
+                showingContainerChanged = true;
+                break;
+              }
+            }
+          }
+        }
+        
+        // 檢查移除的節點
+        if (mutation.removedNodes.length) {
+          for (const node of mutation.removedNodes) {
+            if (node.nodeType === 1) {
+              if ((node.classList && node.classList.contains('showing-container')) || 
+                  (node.querySelector && node.querySelector('.showing-container'))) {
+                showingContainerChanged = true;
+                break;
+              }
+            }
+          }
+        }
+        
+        if (showingContainerChanged) break;
+      }
+      
+      if (showingContainerChanged) {
+        // 短暫延遲確保 DOM 更新完成
+        setTimeout(() => {
+          if (isShowingMode()) {
+            activateScript();
+          } else {
+            deactivateScript();
+          }
+        }, 100);
+      }
+    });
+    
+    // 監控整個 body 的變化
+    showingObserver.observe(document.body, {
+      childList: true,
+      subtree: true
     });
   };
 
   // 初始化
   const init = () => {
-    // 初始化優化狀態
-    checkAndApplyOptimization();
+    // 監聽Options對話框的出現（獨立的 observer，不受 showing-container 影響）
+    if (optionsObserver) {
+      optionsObserver.disconnect();
+    }
     
-    // 開始媒體監控
-    startMediaMonitoring();
-
-    // 監聽Options對話框的出現
-    const observer = new MutationObserver((mutations) => {
-      if (document.querySelector('.dialog-title')?.textContent.includes('Options')) {
-        setTimeout(insertSettingsPanel, 100);
+    optionsObserver = new MutationObserver((mutations) => {
+      // 檢查是否出现了 Options 对话框
+      const dialogTitle = document.querySelector('.dialog-title');
+      if (dialogTitle && dialogTitle.textContent.includes('Options')) {
+        // 延迟执行以确保 dialog 完全加载
+        setTimeout(insertSettingsPanel, 200);
       }
     });
-
-    observer.observe(document.body, {
+    
+    optionsObserver.observe(document.body, {
       childList: true,
       subtree: true
     });
+
+    // 檢查是否已經存在 showing-container
+    if (isShowingMode()) {
+      activateScript();
+    }
+    
+    // 開始監控 showing-container 的出現和消失
+    monitorShowingContainer();
+    
+    // 无论如何都初始化一次优化状态
+    checkAndApplyOptimization();
   };
 
   if (document.readyState === 'loading') {
