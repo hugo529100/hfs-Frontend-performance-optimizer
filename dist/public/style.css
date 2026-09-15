@@ -60,7 +60,7 @@ body.accelerated-mode [style*="background-color"] {
   background-color: var(--bg) !important;
 }
 
-/* 主題特定樣式 */
+/* 主題特定樣式 
 body.accelerated-mode.theme-dark div,
 body.accelerated-mode.theme-dark header {
   background: #000000 !important;
@@ -72,6 +72,7 @@ body.accelerated-mode header {
   background: #ffffff !important;
   background-color: #ffffff !important;
 }
+*/
 
 /* 確保視頻播放流暢 */
 body.accelerated-mode video {
