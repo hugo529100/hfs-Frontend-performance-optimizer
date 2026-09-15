@@ -393,12 +393,13 @@
       mediaObserver = null;
     }
     
-    // 清除優化狀態
-    toggleOptimization(false);
-    
     // 重置狀態標記
     videoPlayerVisible = false;
     imageViewerVisible = false;
+    
+    // 根據當前 scope 重新計算優化狀態
+    // 注意：Full Page (scope 3) 模式下，即使沒有 showing-container 也應保持優化
+    checkAndApplyOptimization();
   };
 
   // 在Options界面中添加設置面板 - 改進版
